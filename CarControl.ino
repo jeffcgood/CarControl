@@ -19,8 +19,10 @@ const int DPinPul_1 = 11;  //The pin to give a pulse of the left motor
 const int DPinDir_2 = 12;   //The pin to control the direction of the right motor
 const int DPinPul_2 = 10;  //The pin to give a pulse of the right motor
 
-const int timerInterval = 10*1000;  //1ms的定时器周期
+const int timerInterval = 10*1000;  //10ms的定时器周期
 const int B = 3975;
+const int Light_Compare = 500;
+const int Sound_Compare = 500;
 
 /*
  * 数字输入输出口
@@ -28,10 +30,10 @@ const int B = 3975;
 const int DPinRelay = 2;  //The relay
 const int DPinLed = 3;  //The led
 const int DPinBuzzer = 4;  //The relay
-const int DPinRadar_left_trig = 6;  //超声波测距左边
-const int DPinRadar_right_trig = 7;  //超声波测距右边
-const int DPinRadar_left_echo = 8;  //超声波测距左边
-const int DPinRadar_right_echo = 9;  //超声波测距右边
+const int DPinRadar_front_trig = 6;  //超声波测距左边
+const int DPinRadar_back_trig = 7;  //超声波测距右边
+const int DPinRadar_front_echo = 8;  //超声波测距左边
+const int DPinRadar_back_echo = 9;  //超声波测距右边
 
 /*
  * 模拟量输入口
@@ -81,10 +83,10 @@ void setup() {
   pinMode(DPinRelay,OUTPUT);
   pinMode(DPinLed,OUTPUT);
   pinMode(DPinBuzzer,OUTPUT);
-  pinMode(DPinRadar_left_trig,OUTPUT);
-  pinMode(DPinRadar_right_trig,OUTPUT);
-  pinMode(DPinRadar_left_echo,INPUT);
-  pinMode(DPinRadar_right_echo,INPUT);
+  pinMode(DPinRadar_front_trig,OUTPUT);
+  pinMode(DPinRadar_back_trig,OUTPUT);
+  pinMode(DPinRadar_front_echo,INPUT);
+  pinMode(DPinRadar_back_echo,INPUT);
 
    Timer1.initialize(timerInterval); 
    Timer1.attachInterrupt(MotorControl); 
@@ -94,9 +96,37 @@ void loop() {
   int val = analogRead(APinTemperature);
   float resistance = (float)(1023-val)*10000/val;
   float temperature = 1/(log(resistance/10000)/B+1/298.15)-273.15;
+  int val1 = analogRead(APinLight);
+  if(val1 > Light_Compare)
+       digitalWrite(DPinLed, LOW);
+       else
+       digitalWrite(DPinLed, HIGH);
+  int val2 = analogRead(APinSound);
+  int alarm = 0;
+  float lengtha1, lengtha2;
+  if(val2 > Sound_Compare){
+      digitalWrite(DPinBuzzer, HIGH);
+      delay(1000);
+       alarm = 1;
+      }
+       else 
+       {
+        digitalWrite(DPinBuzzer, LOW);
+        alarm = 0;
+       }
   lcd.setCursor(6, 0);
   lcd.print(temperature);
   //监听8080端口是否有客户端发送的请求
+  lengtha1 = HC_SR04(1);
+  lengtha2 = HC_SR04(2);
+  if(lengtha1<20)
+  {           digitalWrite(DPinDir_l,HIGH);
+              digitalWrite(DPinDir_2,LOW);
+            }
+  if(lengtha2<20)
+  {           digitalWrite(DPinDir_l,LOW);
+              digitalWrite(DPinDir_2,HIGH);
+            }
   WiFiClient client = server.available();
   if(client){
     //如果监听到客户端的请求，通过串行通信显示说有新的客户端
@@ -109,7 +139,7 @@ void loop() {
         Serial1.write(c);
         if(c == '\n'){
           if(currentLine.length() == 0){
-            HtmlFunction(temperature);
+            HtmlFunction(temperature, alarm);
             break;
           }
           else{
@@ -125,17 +155,6 @@ void loop() {
             if(currentLine.endsWith("GET /Off")){
               digitalWrite(DPinRelay,LOW);
             }
-           // if(currentLine.endsWith("GET /Auto"))
-           // {
-           //   digitalWrite(DPinRelay,LOW);
-           // }
-           // if(currentLine.endsWith("GET /Manul"))
-           // {
-           //   digitalWrite(DPinRelay,LOW);
-           // }
-           // if(currentLine.endsWith("GET /Alarm")){
-            //  digitalWrite(DPinRelay,LOW);
-            //}
             if(currentLine.endsWith("GET /Front")){
               digitalWrite(DPinDir_l,LOW);
               digitalWrite(DPinDir_2,HIGH);
@@ -197,7 +216,7 @@ void printEncryptionType(int thisType)
     case ENC_TYPE_AUTO: Serial1.println("auto");break;
   }
 }
-void HtmlFunction(float temprature){
+void HtmlFunction(float temprature, int alarm){
   server.println("<html>");
             server.println("<head>");
             server.println("<title>Intel Edison");
@@ -213,11 +232,8 @@ void HtmlFunction(float temprature){
             server.println("<a href=\" /Back\">Backward</a> the System<br>");
             server.println("<a href=\" /Left\">Left</a> the System<br>");
             server.println("<a href=\" /Right\">Right</a> the System<br>");
-            //server.println("<a href=\" /Auto\">Auto</a> the System<br>");
-           // server.println("<a href=\" /Manul\">Manul</a> the System<br>");
-            //server.println("<a href=\" /Alarm\">Alarm</a> the System<br>");
             server.println("The value of the Temperature is ");
-            server.println(temprature);
+            server.println(temprature);          
             server.println("<br/>");
             server.println("</body>");
             server.println("<head>");
@@ -230,5 +246,31 @@ void MotorControl()
 {
    digitalWrite(DPinPul_2, !digitalRead(DPinPul_2));
    digitalWrite(DPinPul_1, !digitalRead(DPinPul_1));
+}
+
+float HC_SR04(int num){
+  int trig, echo;
+  int flag =0;
+  float lengtha;
+  unsigned long duration;  //定义duration变量为无符号长整数型变量
+  switch(num){
+  case 1: {trig = DPinRadar_front_trig;
+           echo = DPinRadar_front_echo;
+           }break;  //前面的超声传感器
+  case 2: {trig = DPinRadar_back_trig;
+           echo = DPinRadar_back_echo;
+           }break;  //后面的超声传感器
+  default: {Serial1.print("Error HC-SR04 number");
+            flag =1 ;}break; 
+  }
+  if(flag != 1){
+      digitalWrite(trig,HIGH);
+      delayMicroseconds(15);
+      digitalWrite(trig,LOW);
+      duration = pulseIn(echo, HIGH, 60000); //读取引脚上的高电平脉冲，最大脉冲时间间隔为60毫秒，并且把结果赋值给duration变量
+      lengtha = duration/58;
+      delay(60);
+      return  lengtha;
+  }else return 0;
 }
 
