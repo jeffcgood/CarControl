@@ -2,6 +2,7 @@
 #include "rgb_lcd.h"
 #include <TimerOne.h>
 
+//add a line
 rgb_lcd lcd;
 
 /*
